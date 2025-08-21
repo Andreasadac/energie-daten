@@ -1,13 +1,17 @@
 import json
-from datetime import datetime
+import os
+import shutil
+from datetime import datetime, timedelta
 import requests
 
-# Aktuelles Datum im gewünschten Format
+# Aktuelles Datum und Vortag
 heute = datetime.today()
+gestern = heute - timedelta(days=1)
+
 datum_string = heute.strftime("Stand: %d.%m.%Y")
 api_datum = heute.strftime("%Y-%m-%d")
 
-# API-Endpunkt
+# API-Endpunkt (korrektes & statt &amp;)
 url = f"https://api.energy-charts.info/public_power?country=de&start={api_datum}&end={api_datum}"
 
 # API-Daten abrufen
@@ -51,8 +55,16 @@ struktur = [
     ]
 ]
 
-# JSON-Datei schreiben
-with open("energie.json", "w", encoding="utf-8") as f:
+# Backup der alten Datei (falls vorhanden)
+ziel_datei = "energie.json"
+backup_datei = f"energie_backup_{gestern.strftime('%Y-%m-%d')}.json"
+
+if os.path.exists(ziel_datei):
+    shutil.copy(ziel_datei, backup_datei)
+    print(f"📦 Backup erstellt: {backup_datei}")
+
+# Neue JSON-Datei schreiben
+with open(ziel_datei, "w", encoding="utf-8") as f:
     json.dump(struktur, f, ensure_ascii=False, indent=2)
 
-print(f"✅ Die Datei 'energie.json' wurde erfolgreich mit den Daten vom {datum_string} aktualisiert.")
+print(f"✅ Die Datei '{ziel_datei}' wurde erfolgreich mit den Daten vom {datum_string} aktualisiert.")
