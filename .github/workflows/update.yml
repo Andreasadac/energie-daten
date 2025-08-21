@@ -1,33 +1,36 @@
-name: Tägliches Energie-Update
+name: Energie-Daten aktualisieren
 
 on:
   schedule:
-    - cron: '0 6 * * *'  # täglich um 6 Uhr UTC
-  workflow_dispatch:      # manuelles Auslösen möglich
+    - cron: '0 6 * * *'  # Täglich um 6:00 UTC
+  workflow_dispatch:     # Manuelles Auslösen möglich
 
 jobs:
-  update-json:
+  update-and-push:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Repository auschecken
-        uses: actions/checkout@v3
+    - name: Repository auschecken
+      uses: actions/checkout@v3
 
-      - name: Python installieren
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.x'
+    - name: Python installieren
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
 
-      - name: Abhängigkeiten installieren
-        run: pip install requests
+    - name: Abhängigkeiten installieren
+      run: pip install requests
 
-      - name: JSON erzeugen
-        run: python update_json.py
+    - name: Energie-Daten aktualisieren
+      run: python dein_script.py  # Passe den Dateinamen ggf. an
 
-      - name: Änderungen committen
-        run: |
-          git config --global user.name "github-actions"
-          git config --global user.email "github-actions@github.com"
-          git add energie.json
-          git commit -m "Automatisches Update: $(date +'%d.%m.%Y')" || echo "Keine Änderungen"
-          git push
+    - name: Git konfigurieren
+      run: |
+        git config --global user.name "Andreas Wiedemann"
+        git config --global user.email "deine-email@example.com"
+
+    - name: Änderungen committen und pushen
+      run: |
+        git add energie.json energie_backup_*.json
+        git commit -m "Automatisches Update: $(date +'%d.%m.%Y')" || echo "Keine Änderungen zum Commit"
+        git push https://x-access-token:${{ secrets.INFOGRAM_CREDENTIALS }}@github.com/Andreasadac/energie-daten.git main
