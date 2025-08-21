@@ -3,26 +3,52 @@ from datetime import datetime
 import requests
 
 # Aktuelles Datum im gewünschten Format
-datum = datetime.today().strftime("Stand: %d.%m.%Y")
+heute = datetime.today()
+datum_string = heute.strftime("Stand: %d.%m.%Y")
+api_datum = heute.strftime("%Y-%m-%d")
 
-# Energy-Charts-Webseite abrufen
-url = "https://www.energy-charts.info/charts/energy/chart.htm?l=de&c=DE&source=public"
+# API-Endpunkt für öffentliche Nettostromerzeugung
+url = f"https://api.energy-charts.info/public_power?country=de&start={api_datum}&end={api_datum}"
+
+# API-Daten abrufen
 response = requests.get(url)
-soup = BeautifulSoup(response.text, "html.parser")
+data = response.json()
 
-# Beispielwerte (hier solltest du später echte Extraktion ergänzen)
-erneuerbar = 58.8
-fossil = 41.2
+# Energiequellen klassifizieren
+erneuerbare_quellen = ['wind_onshore', 'wind_offshore', 'solar', 'biomass', 'hydro']
+fossile_quellen = ['hard_coal', 'lignite', 'natural_gas', 'oil']
 
-# JSON-Struktur
-daten = [
+# Summen berechnen
+summe_erneuerbar = 0
+summe_fossil = 0
+summe_gesamt = 0
+
+# Daten sind stündlich, wir summieren über alle Stunden
+for eintrag in data['data']:
+    quelle = eintrag['key']
+    werte = eintrag['values']
+    summe = sum(werte)
+    summe_gesamt += summe
+    if quelle in erneuerbare_quellen:
+        summe_erneuerbar += summe
+    elif quelle in fossile_quellen:
+        summe_fossil += summe
+
+# Prozentuale Anteile berechnen
+anteil_erneuerbar = round((summe_erneuerbar / summe_gesamt) * 100, 1) if summe_gesamt > 0 else 0
+anteil_fossil = round((summe_fossil / summe_gesamt) * 100, 1) if summe_gesamt > 0 else 0
+
+# JSON-Struktur erzeugen
+struktur = [
     [
-        ["", datum],
-        ["Erneuerbar", erneuerbar],
-        ["Fossil", fossil]
+        ["", datum_string],
+        ["Erneuerbar", anteil_erneuerbar],
+        ["Fossil", anteil_fossil]
     ]
 ]
 
-# Datei schreiben
+# JSON-Datei schreiben
 with open("energie.json", "w", encoding="utf-8") as f:
-    json.dump(daten, f, ensure_ascii=False, indent=2)
+    json.dump(struktur, f, ensure_ascii=False, indent=2)
+
+print(f"Die Datei 'energie.json' wurde erfolgreich mit den Daten vom {datum_string} aktualisiert.")
