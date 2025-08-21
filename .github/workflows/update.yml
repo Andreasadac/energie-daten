@@ -2,9 +2,8 @@ name: Energie-Daten aktualisieren
 
 on:
   schedule:
-    - cron: '0 6 * * *'  # Täglich um 6:00 UTC
+    - cron: '0 6 * * *'  # Täglich um 6:00 UTC (8:00 Uhr München)
   workflow_dispatch:     # Manuelles Auslösen möglich
-
 jobs:
   update-and-push:
     runs-on: ubuntu-latest
@@ -23,17 +22,18 @@ jobs:
 
     - name: Energie-Daten aktualisieren
       run: python energie_script.py
-
     - name: Git konfigurieren
       run: |
         git config --global user.name "Andreas Wiedemann"
         git config --global user.email "deine-email@example.com"
 
-- name: Änderungen committen und pushen
-  run: |
-    git add energie.json
-    if ls energie_backup_*.json 1> /dev/null 2>&1; then
-      git add energie_backup_*.json
-    fi
-    git commit -m "Automatisches Update: $(date +'%d.%m.%Y')" || echo "Keine Änderungen zum Commit"
-    git push https://x-access-token:${{ secrets.INFOGRAM_CREDENTIALS }}@github.com/Andreasadac/energie-daten.git main
+    - name: Änderungen committen und pushen
+      env:
+        GH_TOKEN: ${{ secrets.INFOGRAM_CREDENTIALS }}
+      run: |
+        git add energie.json
+        if ls energie_backup_*.json 1> /dev/null 2>&1; then
+          git add energie_backup_*.json
+        fi
+        git commit -m "Automatisches Update: $(date +'%d.%m.%Y')" || echo "Keine Änderungen zum Commit"
+        git push https://x-access-token:${GH_TOKEN}@github.com/Andreasadac/energie-daten.git main
