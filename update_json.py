@@ -7,12 +7,17 @@ heute = datetime.today()
 datum_string = heute.strftime("Stand: %d.%m.%Y")
 api_datum = heute.strftime("%Y-%m-%d")
 
-# API-Endpunkt für öffentliche Nettostromerzeugung
+# API-Endpunkt
 url = f"https://api.energy-charts.info/public_power?country=de&start={api_datum}&end={api_datum}"
 
 # API-Daten abrufen
 response = requests.get(url)
 data = response.json()
+
+# Prüfen, ob 'data' vorhanden ist
+if 'data' not in data or not data['data']:
+    print(f"⚠️ Keine Daten verfügbar für {api_datum}. Die Datei wurde nicht aktualisiert.")
+    exit(0)
 
 # Energiequellen klassifizieren
 erneuerbare_quellen = ['wind_onshore', 'wind_offshore', 'solar', 'biomass', 'hydro']
@@ -23,7 +28,6 @@ summe_erneuerbar = 0
 summe_fossil = 0
 summe_gesamt = 0
 
-# Daten sind stündlich, wir summieren über alle Stunden
 for eintrag in data['data']:
     quelle = eintrag['key']
     werte = eintrag['values']
@@ -51,4 +55,4 @@ struktur = [
 with open("energie.json", "w", encoding="utf-8") as f:
     json.dump(struktur, f, ensure_ascii=False, indent=2)
 
-print(f"Die Datei 'energie.json' wurde erfolgreich mit den Daten vom {datum_string} aktualisiert.")
+print(f"✅ Die Datei 'energie.json' wurde erfolgreich mit den Daten vom {datum_string} aktualisiert.")
