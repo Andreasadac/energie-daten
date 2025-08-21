@@ -1,0 +1,32 @@
+name: Tägliches Energie-Update
+
+on:
+  schedule:
+    - cron: '0 6 * * *'  # täglich um 6 Uhr
+  workflow_dispatch:
+
+jobs:
+  update-json:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v3
+
+      - name: Python installieren
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Abhängigkeiten installieren
+        run: pip install requests beautifulsoup4
+
+      - name: JSON erzeugen
+        run: python update_json.py
+
+      - name: Änderungen committen
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+          git add energie.json
+          git commit -m "Automatisches Update: $(date +'%d.%m.%Y')" || echo "Keine Änderungen"
+          git push
