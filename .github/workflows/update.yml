@@ -22,7 +22,7 @@ jobs:
       run: pip install requests
 
     - name: Energie-Daten aktualisieren
-      run: python dein_script.py  # Passe den Dateinamen ggf. an
+      run: python energie_script.py
 
     - name: Git konfigurieren
       run: |
