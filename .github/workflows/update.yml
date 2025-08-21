@@ -2,12 +2,13 @@ name: Tägliches Energie-Update
 
 on:
   schedule:
-    - cron: '0 6 * * *'  # täglich um 6 Uhr
-  workflow_dispatch:
+    - cron: '0 6 * * *'  # täglich um 6 Uhr UTC
+  workflow_dispatch:      # manuelles Auslösen möglich
 
 jobs:
   update-json:
     runs-on: ubuntu-latest
+
     steps:
       - name: Repository auschecken
         uses: actions/checkout@v3
