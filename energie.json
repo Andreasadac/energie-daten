@@ -1,7 +1,16 @@
 [
   [
-    ["Stand: 21.08.2025", "Anteil"],
-    ["Erneuerbar", 58.8],
-    ["Fossil", 41.2]
+    [
+      "Stand: 21.08.2025",
+      "Anteil"
+    ],
+    [
+      "Erneuerbar",
+      58.8
+    ],
+    [
+      "Fossil",
+      41.2
+    ]
   ]
 ]
