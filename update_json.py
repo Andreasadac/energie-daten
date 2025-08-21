@@ -1,7 +1,6 @@
 import json
 from datetime import datetime
 import requests
-from bs4 import BeautifulSoup
 
 # Aktuelles Datum im gewünschten Format
 datum = datetime.today().strftime("Stand: %d.%m.%Y")
