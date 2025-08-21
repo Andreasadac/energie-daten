@@ -1,5 +1,7 @@
-{
-  "datum": "21.08.2025",
-  "erneuerbar": "58.8",
-  "fossil": "41.2"
-}
+[
+  [
+    ["Energieart", "Anteil"],
+    ["Erneuerbar", 58.8],
+    ["Fossil", 41.2]
+  ]
+]
