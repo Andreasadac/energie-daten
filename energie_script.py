@@ -2,8 +2,8 @@ import requests
 import json
 from datetime import datetime
 
-# Beispiel-URL für die API (bitte durch die echte API-URL ersetzen)
-API_URL = "https://api.example.com/energie"
+# API endpoint für den täglichen Durchschnitt des Erneuerbaren-Anteils in Deutschland
+API_URL = "https://api.energy-charts.info/ren_share_daily_avg?country=de"
 
 # Ziel-Datei
 OUTPUT_FILE = "energie.json"
