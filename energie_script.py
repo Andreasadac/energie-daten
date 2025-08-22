@@ -2,20 +2,37 @@ import requests
 import json
 from datetime import datetime
 
-# API endpoint für den täglichen Durchschnitt des Erneuerbaren-Anteils in Deutschland
+# API endpoint
 API_URL = "https://api.energy-charts.info/ren_share_daily_avg?country=de"
 
-# Ziel-Datei
+# Output file
 OUTPUT_FILE = "energie.json"
 
-def fetch_energy_data():
+def fetch_today_data():
     print("Starte API-Abruf...")
     try:
         response = requests.get(API_URL)
         response.raise_for_status()
         data = response.json()
         print("Daten erfolgreich abgerufen.")
-        return data
+
+        # Heutiges Datum im Format YYYY-MM-DD
+        today = datetime.now().strftime("%Y-%m-%d")
+
+        # Filtere nur den heutigen Eintrag
+        today_data = [entry for entry in data if entry.get("date") == today]
+
+        if today_data:
+            result = {
+                "date": today,
+                "renewable_share": today_data[0].get("value"),
+                "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+            return result
+        else:
+            print("Keine Daten für das heutige Datum gefunden.")
+            return None
+
     except Exception as e:
         print("Fehler beim Abrufen der Daten:", e)
         return None
@@ -23,8 +40,6 @@ def fetch_energy_data():
 def write_to_json(data):
     print("Schreibe Daten in energie.json...")
     try:
-        # Füge aktuelles Datum hinzu, um tägliche Änderung zu erzwingen
-        data["last_updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         print("Datei erfolgreich geschrieben.")
@@ -32,7 +47,7 @@ def write_to_json(data):
         print("Fehler beim Schreiben der Datei:", e)
 
 def main():
-    data = fetch_energy_data()
+    data = fetch_today_data()
     if data:
         write_to_json(data)
     else:
