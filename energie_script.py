@@ -28,13 +28,23 @@ def fetch_latest_entry():
             return None
 
         # Berechne fossil_share als Differenz zu 100%
-        fossil_share = round(100.0 - renewable_share, 2)
+        fossil_share = round(100.0 - renewable_share, 1)
 
-        return {
-            "date": date,
-            "renewable_share": round(renewable_share, 2),
-            "fossil_share": fossil_share
-        }
+        # Formatierung
+        datum_string = f"Stand: {datetime.strptime(date, '%Y-%m-%d').strftime('%d.%m.%Y')}"
+        anteil_erneuerbar = f"{round(renewable_share, 1):.1f}%".replace(".", ",")
+        anteil_fossil = f"{fossil_share:.1f}%".replace(".", ",")
+
+        # Struktur gemäß Vorgabe
+        result = [
+            [
+                ["", datum_string],
+                ["Erneuerbar", anteil_erneuerbar],
+                ["Fossil", anteil_fossil]
+            ]
+        ]
+
+        return result
 
     except Exception as e:
         print("Fehler beim Abrufen der Daten:", e)
