@@ -33,4 +33,4 @@ jobs:
           git remote set-url origin https://x-access-token:${TOKEN}@github.com/Andreasadac/energie-daten.git
           git add energie.json
           git commit -m "Update energie.json" || echo "Keine Änderungen zum Commit"
-          git push
+          git push origin HEAD:${{ github.ref }}
