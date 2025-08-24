@@ -1,4 +1,4 @@
-name: Energie Update
+name: Energie Update (Debug)
 
 on:
   schedule:
@@ -21,8 +21,20 @@ jobs:
       - name: Install dependencies
         run: pip install requests
 
+      - name: Show working directory
+        run: pwd
+
+      - name: List files before script
+        run: ls -l
+
       - name: Run script
         run: python energie_script.py
+
+      - name: Show energie.json content
+        run: cat energie.json || echo "Datei nicht gefunden"
+
+      - name: Show git diff
+        run: git diff energie.json || echo "Keine Unterschiede"
 
       - name: Commit and push changes
         env:
@@ -33,4 +45,4 @@ jobs:
           git remote set-url origin https://x-access-token:${TOKEN}@github.com/Andreasadac/energie-daten.git
           git add energie.json
           git commit -m "Update energie.json" || echo "Keine Änderungen zum Commit"
-          git push origin HEAD:${{ github.ref }}
+          git push origin HEAD:${{ github.ref }} || echo "Push fehlgeschlagen"
