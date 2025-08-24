@@ -1,5 +1,6 @@
 import requests
 import json
+import os
 from datetime import datetime
 
 # API endpoint
@@ -52,6 +53,9 @@ def fetch_latest_entry():
 
 def write_to_json(data):
     try:
+        # Datei löschen, um sicherzustellen, dass sie neu geschrieben wird
+        if os.path.exists(OUTPUT_FILE):
+            os.remove(OUTPUT_FILE)
         with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         print("Datei erfolgreich geschrieben.")
