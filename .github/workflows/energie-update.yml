@@ -1,8 +1,8 @@
-name: Energie Update (Debug)
+name: Energie Update mit Fallback
 
 on:
   schedule:
-    - cron: '0 6 * * *'
+    - cron: '0 11 * * *'  # Läuft täglich um 11:00 Uhr
   workflow_dispatch:
 
 jobs:
@@ -21,22 +21,16 @@ jobs:
       - name: Install dependencies
         run: pip install requests
 
-      - name: Show working directory
-        run: pwd
-
-      - name: List files before script
-        run: ls -l
-
-      - name: Run script
+      - name: Run energie_script.py mit Fallback
         run: python energie_script.py
 
-      - name: Show energie.json content
+      - name: Zeige Inhalt von energie.json
         run: cat energie.json || echo "Datei nicht gefunden"
 
-      - name: Show git diff
+      - name: Zeige Unterschiede zur vorherigen Version
         run: git diff energie.json || echo "Keine Unterschiede"
 
-      - name: Commit and push changes
+      - name: Commit und Push Änderungen
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -44,5 +38,5 @@ jobs:
           git config --global user.email 'github-actions@github.com'
           git remote set-url origin https://x-access-token:${TOKEN}@github.com/Andreasadac/energie-daten.git
           git add energie.json
-          git commit -m "Update energie.json" || echo "Keine Änderungen zum Commit"
+          git commit -m "Update energie.json (mit Fallback)" || echo "Keine Änderungen zum Commit"
           git push origin HEAD:${{ github.ref }} || echo "Push fehlgeschlagen"
