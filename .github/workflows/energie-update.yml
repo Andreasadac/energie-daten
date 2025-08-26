@@ -2,7 +2,7 @@ name: Energie Update mit Fallback
 
 on:
   schedule:
-    - cron: '0 11 * * *'  # Läuft täglich um 11:00 Uhr
+    - cron: '5 11 * * *'  # Läuft täglich um 11:00 Uhr
   workflow_dispatch:
 
 jobs:
