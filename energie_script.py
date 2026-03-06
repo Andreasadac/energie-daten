@@ -1,11 +1,13 @@
 import os
 import re
 import json
-from datetime import date, datetime
+from datetime import datetime
 from playwright.sync_api import sync_playwright
 
 OUTPUT_FILE = "energie.json"
 TMP_FILE = "energie.json.tmp"
+
+URL = "https://www.energy-charts.info/charts/energy_pie/chart.htm?l=de&c=DE&interval=year&source=total"
 
 def fmt_percent_de(x: float) -> str:
     return f"{x:.1f}%".replace(".", ",")
@@ -20,8 +22,7 @@ def extract_stand(text: str) -> str:
         return m.group(1)
 
     # "letztes Update: 02/24/2026, ..." oder "last update: 02/24/2026, ..."
-    m = re.search(r"(letztes\s+Update|last\s+update)\s*:\s*([0-9]{2}/[0-9]{2}/[0-9]{4})",
-                  text, re.IGNORECASE)
+    m = re.search(r"(letztes\s+Update|last\s+update)\s*:\s*([0-9]{2}/[0-9]{2}/[0-9]{4})", text, re.IGNORECASE)
     if m:
         dt = datetime.strptime(m.group(2), "%m/%d/%Y")
         return dt.strftime("%d.%m.%Y")
@@ -41,69 +42,36 @@ def build_infogram_json(stand: str, renewable: float, fossil: float) -> list:
         ["Fossil", fmt_percent_de(fossil)]
     ]]
 
-def extract_summary_percentages(rendered_text: str) -> tuple[float, float]:
+def pick_plausible(values, lo=20.0, hi=80.0):
+    """Wähle einen plausiblen Anteil (typisch Summenwert)"""
+    vals = [v for v in values if lo <= v <= hi]
+    if not vals:
+        return None
+    # Nimm den Wert, der am nächsten bei 50 liegt
+    return min(vals, key=lambda x: abs(x - 50.0))
+
+def extract_percent_candidates(text: str):
     """
-    Extrahiert NUR die Summenwerte aus Zeilen wie:
-      Erneuerbar 18,286.28 GWh 49.3 %
-      Fossil     18,792.16 GWh 50.7 %
-    (Beispiel solcher Summenzeilen in Energy-Charts-Pie-Ausgaben.) [3](https://energy-charts.info/charts/energy_pie/chart.htm)
-
-    Wichtig:
-    - Wortgrenzen \bErneuerbar\b verhindern Match in "Erneuerbarer Müll"
-    - Wir akzeptieren GWh/TWh (Summary), nicht die Segment-Prozente
-    - Wir wählen das Paar, dessen Summe am nächsten bei 100 liegt
+    Kandidaten aus gerendertem Text extrahieren.
+    Achtung: 'Fossil oil' etc. enthält auch 'Fossil' — daher später Plausibilitätsfilter.
     """
+    # alles auf eine Zeile normalisieren, damit DOTALL nicht nötig ist
+    t = " ".join(text.split())
 
-    # Zeilenweise analysieren (robuster als "alles in einer Zeile")
-    lines = [" ".join(l.strip().split()) for l in rendered_text.splitlines() if l.strip()]
+    fossil_candidates = [
+        to_float_percent(x)
+        for x in re.findall(r"\bFossil\b[^%]{0,120}?([0-9]{1,3}[,\.][0-9])\s*%", t, flags=re.IGNORECASE)
+    ]
 
-    # Summary-Zeilen (DE/EN tolerant)
-    ren_re = re.compile(r"^\b(Erneuerbar|Renewable)\b\s+[0-9\.,]+\s*(GWh|TWh)\s+([0-9]{1,3}[,\.][0-9])\s*%$",
-                        re.IGNORECASE)
-    fos_re = re.compile(r"^\bFossil\b\s+[0-9\.,]+\s*(GWh|TWh)\s+([0-9]{1,3}[,\.][0-9])\s*%$",
-                        re.IGNORECASE)
+    # \bErneuerbar\b verhindert Match in "Erneuerbarer Müll"
+    renewable_candidates = [
+        to_float_percent(x)
+        for x in re.findall(r"\bErneuerbar\b[^%]{0,120}?([0-9]{1,3}[,\.][0-9])\s*%", t, flags=re.IGNORECASE)
+    ]
 
-    ren_vals = []
-    fos_vals = []
-
-    for line in lines:
-        m = ren_re.match(line)
-        if m:
-            ren_vals.append(to_float_percent(m.group(3)))
-            continue
-        m = fos_re.match(line)
-        if m:
-            fos_vals.append(to_float_percent(m.group(2)))
-
-    if not ren_vals or not fos_vals:
-        # Debug: genau den gerenderten Text sichern
-        with open("debug_rendered_text.txt", "w", encoding="utf-8") as f:
-            f.write(rendered_text)
-        raise RuntimeError(
-            "Summen-Zeilen nicht gefunden (Erneuerbar/Fossil mit GWh/TWh). "
-            "debug_rendered_text.txt wurde geschrieben."
-        )
-
-    # Bestes Paar wählen: ren + fos ≈ 100
-    best = None
-    best_diff = 999.0
-    for r in ren_vals:
-        for f in fos_vals:
-            diff = abs((r + f) - 100.0)
-            if diff < best_diff:
-                best_diff = diff
-                best = (r, f)
-
-    if best is None or best_diff > 1.0:
-        raise RuntimeError(f"Unplausible Summenwerte: ren+fos nicht nahe 100 (diff={best_diff:.2f}).")
-
-    return best
+    return renewable_candidates, fossil_candidates
 
 def main():
-    # Du hast diese URL angegeben – ohne year Parameter.
-    # Wir lassen das so, damit es exakt dem Browser entspricht.
-    url = "https://www.energy-charts.info/charts/energy_pie/chart.htm?l=de&c=DE&interval=year&source=total"
-
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(
@@ -111,11 +79,12 @@ def main():
                 args=["--no-sandbox", "--disable-dev-shm-usage"]
             )
             page = browser.new_page(locale="de-DE")
-            page.goto(url, wait_until="networkidle", timeout=90000)
+            page.goto(URL, wait_until="networkidle", timeout=90000)
+
             rendered_text = page.inner_text("body")
             browser.close()
 
-        # Falls trotz Playwright nur die JS-Shell kommt (CI-typisch) [1](https://www.energy-charts.info/charts/energy_pie/chart.htm?l=fr&c=DE&source=total&interval=month&legendItems=0wf&month=11)[2](https://energy-charts.info/charts/energy_pie/chart.htm?l=de&c=DE&interval=year)
+        # In CI kann ohne JS nur eine Shell kommen, daher Debug bei Bedarf [1](https://www.energy-charts.info/charts/energy_pie/chart.htm?l=fr&c=DE&source=total&interval=month&legendItems=0wf&month=11)[2](https://energy-charts.info/charts/energy_pie/chart.htm?l=de&c=DE&interval=year)
         if "enable Javascript" in rendered_text or "enable JavaScript" in rendered_text:
             with open("debug_rendered_text.txt", "w", encoding="utf-8") as f:
                 f.write(rendered_text)
@@ -123,18 +92,36 @@ def main():
 
         stand = extract_stand(rendered_text)
 
-        renewable, fossil = extract_summary_percentages(rendered_text)
+        ren_candidates, fos_candidates = extract_percent_candidates(rendered_text)
+
+        # 1) Fossil: plausiblen Summenwert wählen (zwischen 20 und 80)
+        fossil = pick_plausible(fos_candidates)
+        if fossil is None:
+            # Debug schreiben
+            with open("debug_rendered_text.txt", "w", encoding="utf-8") as f:
+                f.write(rendered_text)
+            raise RuntimeError("Konnte keinen plausiblen Fossil-Summenwert finden.")
+
+        # 2) Erneuerbar: plausiblen Summenwert wählen
+        renewable = pick_plausible(ren_candidates)
+
+        # 3) Wenn Erneuerbar fehlt oder offensichtlich ein Slice (<10), aus Fossil berechnen
+        if renewable is None or renewable < 10.0:
+            renewable = round(100.0 - fossil, 1)
+
+        # Finale Plausibilitätskorrektur: Summe exakt auf 100 (1 Nachkommastelle)
+        # (damit es genauso sauber ist wie auf der Seite)
+        fossil = round(fossil, 1)
+        renewable = round(100.0 - fossil, 1)
 
         data = build_infogram_json(stand, renewable, fossil)
-
-        # Nur bei Erfolg überschreiben -> letzter Stand bleibt bei Fehlern
         safe_write_json(data)
 
         print("OK: energie.json aktualisiert")
         print("Stand:", stand, "| Erneuerbar:", renewable, "| Fossil:", fossil)
 
     except Exception as e:
-        # Letzten Stand behalten: tmp löschen, nicht crashen
+        # letzten Stand behalten
         if os.path.exists(TMP_FILE):
             try:
                 os.remove(TMP_FILE)
@@ -142,7 +129,7 @@ def main():
                 pass
         print("WARNUNG: Update fehlgeschlagen – energie.json bleibt unverändert.")
         print("Fehler:", e)
-        return
+        return  # Exit 0
 
 if __name__ == "__main__":
     main()
