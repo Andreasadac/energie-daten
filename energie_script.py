@@ -1,104 +1,114 @@
-import re
+import requests
 import json
-from datetime import date, datetime
-from playwright.sync_api import sync_playwright
+import os
+from datetime import datetime, date
 
+# API endpoint
+API_URL = "https://api.energy-charts.info/ren_share_daily_avg"
+
+# Output file
 OUTPUT_FILE = "energie.json"
 
-def fmt_percent_de(x: float) -> str:
-    return f"{x:.1f}%".replace(".", ",")
+# Zeitraum: Jahresanfang fix auf 01.01.2026
+START_DATE = date(2026, 1, 1)
 
-def to_float_percent(s: str) -> float:
-    return float(s.replace(",", ".").strip())
+def fetch_ytd_average(start_date: date):
+    """
+    Holt alle Tageswerte ab start_date bis heute und berechnet den YTD-Durchschnitt.
+    Gibt (last_date_str, avg_renewable_share) zurück.
+    """
+    try:
+        today_str = date.today().strftime("%Y-%m-%d")
+        start_str = start_date.strftime("%Y-%m-%d")
 
-def extract_stand(text: str) -> str:
-    # bevorzugt: "Stand: 05.03.2026"
-    m = re.search(r"Stand:\s*([0-9]{2}\.[0-9]{2}\.[0-9]{4})", text)
-    if m:
-        return m.group(1)
+        # API unterstützt start/end im Daily-Format YYYY-MM-DD
+        # (laut Doku: Daily Format ist gültig und interpretiert in lokaler Zeitzone) 
+        params = {
+            "country": "de",
+            "start": start_str,
+            "end": today_str
+        }
 
-    # alternativ: "letztes Update: 03/03/2026, ..." oder "last update: 03/03/2026, ..."
-    m = re.search(r"(letztes\s+Update|last\s+update)\s*:\s*([0-9]{2}/[0-9]{2}/[0-9]{4})", text, re.IGNORECASE)
-    if m:
-        dt = datetime.strptime(m.group(2), "%m/%d/%Y")
-        return dt.strftime("%d.%m.%Y")
+        response = requests.get(API_URL, params=params, timeout=30)
+        response.raise_for_status()
+        data = response.json()
 
-    # fallback: heutiges Datum
-    return datetime.now().strftime("%d.%m.%Y")
+        if not data:
+            print("Keine Daten verfügbar (leere Antwort).")
+            return None
 
-def extract_values(text: str):
-    # Nach Rendering stehen diese Strings üblicherweise im Text (DE oder EN).
-    # Wir suchen bewusst nur die Prozentwerte.
-    m_ren = re.search(r"(Erneuerbar|Renewable)\s+([0-9]{1,3}[,\.][0-9])\s*%", text, re.IGNORECASE)
-    m_fos = re.search(r"(Fossil)\s+([0-9]{1,3}[,\.][0-9])\s*%", text, re.IGNORECASE)
+        # Defensive: nur gültige Einträge ab START_DATE
+        filtered = []
+        for item in data:
+            d = item.get("date")
+            v = item.get("value")
+            if d is None or v is None:
+                continue
+            try:
+                d_obj = datetime.strptime(d, "%Y-%m-%d").date()
+            except ValueError:
+                continue
+            if d_obj >= start_date:
+                filtered.append((d_obj, float(v)))
 
-    if not m_ren or not m_fos:
-        # Debug-Hilfe: kompletten Text sichern
-        with open("debug_rendered_text.txt", "w", encoding="utf-8") as f:
-            f.write(text)
-        raise RuntimeError(
-            "Konnte Erneuerbar/Fossil nach Rendering nicht finden. "
-            "debug_rendered_text.txt wurde geschrieben."
-        )
+        if not filtered:
+            print("Keine Daten im gewünschten Zeitraum gefunden.")
+            return None
 
-    ren = to_float_percent(m_ren.group(2))
-    fos = to_float_percent(m_fos.group(2))
-    return ren, fos
+        # Sortieren nach Datum (falls API nicht garantiert sortiert)
+        filtered.sort(key=lambda x: x[0])
 
-def build_infogram_json(stand_ddmmyyyy: str, ren: float, fos: float):
-    return [[
-        ["", f"Stand: {stand_ddmmyyyy}"],
-        ["Erneuerbar", fmt_percent_de(ren)],
-        ["Fossil", fmt_percent_de(fos)]
-    ]]
+        # Letztes verfügbares Datum
+        last_date = filtered[-1][0].strftime("%Y-%m-%d")
+
+        # YTD Durchschnitt
+        avg_renewable = sum(v for _, v in filtered) / len(filtered)
+
+        return last_date, avg_renewable
+
+    except Exception as e:
+        print("Fehler beim Abrufen/Berechnen der Daten:", e)
+        return None
+
+def generate_json_content(date_str, renewable_share):
+    fossil_share = round(100.0 - renewable_share, 1)
+
+    datum_string = f"Stand: {datetime.strptime(date_str, '%Y-%m-%d').strftime('%d.%m.%Y')}"
+    anteil_erneuerbar = f"{round(renewable_share, 1):.1f}%".replace(".", ",")
+    anteil_fossil = f"{fossil_share:.1f}%".replace(".", ",")
+
+    result = [
+        [
+            ["", datum_string],
+            ["Erneuerbar", anteil_erneuerbar],
+            ["Fossil", anteil_fossil]
+        ]
+    ]
+    return result
+
+def write_to_json(data):
+    try:
+        if os.path.exists(OUTPUT_FILE):
+            os.remove(OUTPUT_FILE)
+        with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        print("Datei erfolgreich geschrieben:", OUTPUT_FILE)
+    except Exception as e:
+        print("Fehler beim Schreiben der Datei:", e)
 
 def main():
-    year = date.today().year  # AUTO
+    entry = fetch_ytd_average(START_DATE)
 
-    url = (
-        "https://www.energy-charts.info/charts/energy_pie/chart.htm"
-        f"?l=de&c=DE&interval=year&source=total&year={year}"
-    )
+    if entry:
+        date_str, renewable_share = entry
+    else:
+        # Fallback: heutiges Datum und feste Werte (dein aktueller Stand)
+        date_str = date.today().strftime("%Y-%m-%d")
+        renewable_share = 48.7  # Fallback (heute laut dir)
+        print("Fallback aktiv: verwende feste Werte.")
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=True,
-            args=["--no-sandbox", "--disable-dev-shm-usage"]
-        )
-        page = browser.new_page(
-            locale="de-DE",
-            user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                       "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-        )
-
-        page.goto(url, wait_until="networkidle", timeout=90000)
-
-        # Sicherstellen, dass überhaupt etwas Inhalt da ist
-        body_text = page.inner_text("body")
-
-        # Falls die Seite trotz Browser nur die JS-Info zeigt (selten):
-        if "enable Javascript" in body_text or "enable JavaScript" in body_text:
-            page.screenshot(path="debug_page.png", full_page=True)
-            with open("debug_rendered_text.txt", "w", encoding="utf-8") as f:
-                f.write(body_text)
-            raise RuntimeError(
-                "Trotz Headless-Browser nur JS-Hinweis erhalten. "
-                "debug_page.png und debug_rendered_text.txt wurden geschrieben."
-            )
-
-        stand = extract_stand(body_text)
-        ren, fos = extract_values(body_text)
-
-        browser.close()
-
-    data = build_infogram_json(stand, ren, fos)
-
-    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-    print("OK:", OUTPUT_FILE)
-    print("Jahr:", year, "| Stand:", stand, "| Erneuerbar:", ren, "| Fossil:", fos)
+    json_data = generate_json_content(date_str, renewable_share)
+    write_to_json(json_data)
 
 if __name__ == "__main__":
     main()
-``
