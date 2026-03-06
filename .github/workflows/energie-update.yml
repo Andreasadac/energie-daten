@@ -1,42 +1,42 @@
-name: Energie Update mit Fallback
+name: Energie JSON aktualisieren
 
 on:
-  schedule:
-    - cron: '5 9 * * *'  # 11:05 Uhr München-Zeit (MESZ)
   workflow_dispatch:
+  schedule:
+    - cron: "15 6 * * *"  # täglich 06:15 UTC (anpassen)
 
 jobs:
-  update-json:
+  update:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
-          python-version: '3.x'
+          python-version: "3.12"
 
-      - name: Install dependencies
-        run: pip install requests
-
-      - name: Run energie_script.py mit Fallback
-        run: python energie_script.py
-
-      - name: Zeige Inhalt von energie.json
-        run: cat energie.json || echo "Datei nicht gefunden"
-
-      - name: Zeige Unterschiede zur vorherigen Version
-        run: git diff energie.json || echo "Keine Unterschiede"
-
-      - name: Commit und Push Änderungen
-        env:
-          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install Python dependencies
         run: |
-          git config --global user.name 'github-actions'
-          git config --global user.email 'github-actions@github.com'
-          git remote set-url origin https://x-access-token:${TOKEN}@github.com/Andreasadac/energie-daten.git
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Playwright browsers (Chromium)
+        run: |
+          python -m playwright install chromium --with-deps
+
+      - name: Run script
+        run: |
+          python energie_script.py
+
+      - name: Commit & push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add energie.json
-          git commit -m "Update energie.json (mit Fallback)" || echo "Keine Änderungen zum Commit"
-          git push origin HEAD:${{ github.ref }} || echo "Push fehlgeschlagen"
+          git diff --staged --quiet || git commit -m "Update energie.json"
+          git push
+``
