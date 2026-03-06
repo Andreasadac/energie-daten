@@ -12,7 +12,10 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v5
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -24,19 +27,34 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Install Playwright browsers (Chromium)
+      - name: Install Playwright + Chromium (with OS deps)
         run: |
           python -m playwright install chromium --with-deps
 
-      - name: Run script
+      - name: Run script (keeps last energie.json on failure)
         run: |
           python energie_script.py
 
-      - name: Commit & push if changed
+      - name: Commit & push if energie.json changed
+        env:
+          # Option A: nutze GitHub Token
+          # GITHUB_TOKEN wird automatisch bereitgestellt
+          # Option B: nutze dein eigenes Token:
+          REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
           git add energie.json
-          git diff --staged --quiet || git commit -m "Update energie.json"
+
+          # Nur committen, wenn sich energie.json wirklich geändert hat
+          git diff --staged --quiet && echo "No changes to commit." && exit 0
+
+          git commit -m "Update energie.json"
+
+          # Push: Option B (PAT) wenn vorhanden, sonst normaler Push mit GITHUB_TOKEN
+          if [ -n "$REPO_TOKEN" ]; then
+            git remote set-url origin https://x-access-token:${REPO_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
+          fi
+
           git push
-``
