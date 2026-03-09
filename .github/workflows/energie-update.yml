@@ -3,7 +3,7 @@ name: Energie JSON aktualisieren
 on:
   workflow_dispatch:
   schedule:
-    - cron: "15 6 * * *" # täglich 06:15 UTC (anpassen)
+    - cron: "15 6 * * *" # täglich 07:15 UTC (anpassen)
 
 jobs:
   update:
